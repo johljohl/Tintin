@@ -1,0 +1,1274 @@
+<!DOCTYPE html>
+<html lang="sv">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>Tintins äventyr: Mysteriet med professor Kalkyls kidnappning</title>
+    <style>
+      @import url("https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap");
+
+      :root {
+        --bg-color: #1a1a1a;
+        --nes-black: #000000;
+        --nes-white: #ffffff;
+        --scanline-color: rgba(0, 0, 0, 0.5);
+      }
+
+      body {
+        background-color: var(--bg-color);
+        color: var(--nes-white);
+        font-family: "Press Start 2P", cursive;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        overflow: hidden;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+
+      #game-container {
+        position: relative;
+        width: 768px; /* 256 * 3 */
+        height: 720px; /* 240 * 3 */
+        max-width: 100vw;
+        max-height: 100vh;
+        background-color: var(--nes-black);
+        box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+        border: 4px solid #333;
+      }
+
+      canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        image-rendering: pixelated;
+      }
+
+      /* CRT Effects */
+      .scanlines {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(
+          to bottom,
+          rgba(255, 255, 255, 0),
+          rgba(255, 255, 255, 0) 50%,
+          rgba(0, 0, 0, 0.2) 50%,
+          rgba(0, 0, 0, 0.2)
+        );
+        background-size: 100% 4px;
+        pointer-events: none;
+        z-index: 10;
+      }
+
+      .crt-glow {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: radial-gradient(
+          circle,
+          rgba(18, 16, 16, 0) 60%,
+          rgba(0, 0, 0, 0.4) 100%
+        );
+        pointer-events: none;
+        z-index: 11;
+      }
+
+      /* Mobile Controls */
+      #mobile-controls {
+        position: absolute;
+        bottom: 20px;
+        left: 0;
+        width: 100%;
+        height: 150px;
+        pointer-events: none;
+        display: none;
+        z-index: 20;
+      }
+
+      .d-pad {
+        position: absolute;
+        bottom: 20px;
+        left: 20px;
+        width: 120px;
+        height: 120px;
+        pointer-events: auto;
+      }
+
+      .d-btn {
+        position: absolute;
+        width: 40px;
+        height: 40px;
+        background: rgba(255, 255, 255, 0.2);
+        border: 2px solid rgba(255, 255, 255, 0.4);
+      }
+      .d-btn:active {
+        background: rgba(255, 255, 255, 0.5);
+      }
+      .d-up {
+        top: 0;
+        left: 40px;
+      }
+      .d-down {
+        bottom: 0;
+        left: 40px;
+      }
+      .d-left {
+        top: 40px;
+        left: 0;
+      }
+      .d-right {
+        top: 40px;
+        right: 0;
+      }
+
+      .action-btns {
+        position: absolute;
+        bottom: 20px;
+        right: 20px;
+        width: 140px;
+        height: 60px;
+        pointer-events: auto;
+      }
+
+      .a-btn,
+      .b-btn {
+        position: absolute;
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        border: 2px solid rgba(255, 255, 255, 0.4);
+        color: white;
+        font-family: "Press Start 2P";
+        font-size: 12px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+      .b-btn {
+        left: 0;
+        bottom: 0;
+        background: rgba(200, 0, 0, 0.4);
+      }
+      .a-btn {
+        right: 0;
+        bottom: 10px;
+        background: rgba(0, 200, 0, 0.4);
+      }
+      .a-btn:active,
+      .b-btn:active {
+        opacity: 0.7;
+      }
+
+      @media (hover: none) and (pointer: coarse) {
+        #mobile-controls {
+          display: block;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="game-container">
+      <canvas id="gameCanvas" width="256" height="240"></canvas>
+      <div class="scanlines"></div>
+      <div class="crt-glow"></div>
+
+      <div id="mobile-controls">
+        <div class="d-pad">
+          <div class="d-btn d-up" data-key="ArrowUp"></div>
+          <div class="d-btn d-down" data-key="ArrowDown"></div>
+          <div class="d-btn d-left" data-key="ArrowLeft"></div>
+          <div class="d-btn d-right" data-key="ArrowRight"></div>
+        </div>
+        <div class="action-btns">
+          <div class="b-btn" data-key="x">B</div>
+          <div class="a-btn" data-key="z">A</div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      /**
+       * TINTINS ÄVENTYR: MYSTERIET MED PROFESSOR KALKYLS KIDNAPPNING
+       * Version 4.1 - Clean Graphics (No Noise)
+       * Features: 16x16 Sprites, Solid Colors, Comic UI, Audio, Animation
+       */
+
+      // --- Constants & Config ---
+      const CANVAS_W = 256;
+      const CANVAS_H = 240;
+      const TILE_SIZE = 16;
+
+      // Colors (Updated for better visuals)
+      const PALETTE = {
+        black: "#000000",
+        white: "#FFFFFF",
+        bg: "#111111",
+        text: "#000000", // Comic text is black
+        comicBg: "#FFFFFF",
+        tintinFace: "#FFDDBB", // Lighter skin tone
+        tintinHair: "#E67E22", // More vibrant orange
+        tintinShirt: "#3498DB", // Iconic blue
+        tintinPants: "#8D6E63", // Brown
+        milouWhite: "#F0F0F0",
+        haddockBlue: "#1A237E",
+        haddockHat: "#212121",
+        grass: "#4CAF50",
+        grassDark: "#388E3C",
+        road: "#757575",
+        roadDark: "#616161",
+        buildingWall: "#F5F5DC", // Beige/Cream
+        buildingRoof: "#546E7A", // Slate Blue/Grey
+        window: "#81D4FA",
+        clueOrange: "#FF9800",
+        clueBlue: "#29B6F6",
+        uiBorder: "#000000",
+      };
+
+      // --- Audio System ---
+      const AudioSynth = {
+        ctx: null,
+        isPlaying: false,
+        timer: null,
+        tick: 0,
+
+        init: function () {
+          if (!this.ctx) {
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            this.startMusic();
+          } else if (this.ctx.state === "suspended") {
+            this.ctx.resume();
+          }
+        },
+
+        playTone: function (freq, type, duration, vol = 0.1) {
+          if (!this.ctx) return;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = type;
+          osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+          gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(
+            0.01,
+            this.ctx.currentTime + duration
+          );
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start();
+          osc.stop(this.ctx.currentTime + duration);
+        },
+
+        sfx: {
+          step: () => AudioSynth.playTone(100, "triangle", 0.05, 0.05),
+          collect: () => {
+            AudioSynth.playTone(600, "square", 0.1, 0.1);
+            setTimeout(() => AudioSynth.playTone(800, "square", 0.2, 0.1), 100);
+          },
+          error: () => AudioSynth.playTone(150, "sawtooth", 0.3, 0.1),
+          win: () => {
+            [440, 554, 659, 880].forEach((f, i) =>
+              setTimeout(
+                () => AudioSynth.playTone(f, "square", 0.2, 0.2),
+                i * 200
+              )
+            );
+          },
+          haddock: () => {
+            AudioSynth.playTone(100, "sawtooth", 0.1, 0.1);
+            setTimeout(
+              () => AudioSynth.playTone(80, "sawtooth", 0.2, 0.1),
+              100
+            );
+          },
+        },
+
+        startMusic: function () {
+          if (this.timer) return;
+          const notes = [146, 0, 146, 0, 174, 0, 164, 0];
+          this.timer = setInterval(() => {
+            if (currentState !== STATE.PLAYING) return;
+            let note = notes[this.tick % notes.length];
+            if (note > 0) this.playTone(note, "triangle", 0.2, 0.03);
+            this.tick++;
+          }, 250);
+        },
+      };
+
+      // --- Game State ---
+      const STATE = {
+        START: 0,
+        INTRO: 1,
+        PLAYING: 2,
+        NOTEBOOK: 3,
+        ACCUSE: 4,
+        WIN: 5,
+        LOSE: 6,
+      };
+
+      let currentState = STATE.START;
+      let frameCount = 0;
+      let keys = {};
+      let lastKeys = {};
+
+      // --- Logic Data ---
+      const ATTRIBUTES = ["Hatt", "Solglasögon", "Mustasch", "Kofot", "Skor"];
+      const LOCATIONS = [
+        { name: "Marlinsprång", x: 2, y: 2 },
+        { name: "Laboratoriet", x: 10, y: 2 },
+        { name: "Hamnen", x: 2, y: 8 },
+        { name: "Operan", x: 10, y: 8 },
+        { name: "Museet", x: 2, y: 13 },
+        { name: "Flygplatsen", x: 10, y: 13 },
+      ];
+
+      const SUSPECTS = [
+        {
+          name: "Rastapopoulos",
+          traits: ["Hatt", "Solglasögon", "Mustasch", "Skor"],
+          id: 0,
+        },
+        { name: "Allan", traits: ["Hatt", "Kofot", "Skor"], id: 1 },
+        { name: "Dr. Muller", traits: ["Mustasch", "Skor"], id: 2 },
+        { name: "Bird", traits: ["Hatt", "Solglasögon", "Skor"], id: 3 },
+        { name: "Trickler", traits: ["Mustasch", "Skor", "Kofot"], id: 4 },
+        { name: "Jorgen", traits: ["Solglasögon", "Kofot"], id: 5 },
+      ];
+
+      let solution = { suspect: null, location: null };
+      let cluesFound = [];
+      let player = {
+        x: 7 * TILE_SIZE,
+        y: 7 * TILE_SIZE,
+        dir: 0,
+        moving: false,
+        history: [],
+      };
+      let mapObjects = [];
+      let showMessage = null;
+      let currentMessagePortrait = null;
+      let accuseStep = 0;
+      let accuseSelection = { suspect: 0, location: 0 };
+      let haddock = { x: 4 * TILE_SIZE, y: 4 * TILE_SIZE };
+
+      const HADDOCK_QUOTES = [
+        "Anfäkta och anamma!",
+        "Bomber och granater!",
+        "Krabbsaltade tångräkor!",
+        "Pest och kolera!",
+        "Riv mina råsegel!",
+        "Hitta Kalkyl nu!",
+        "Håll ögonen öppna Tintin!",
+      ];
+
+      // --- Sprites & Animation (16x16) ---
+      // 0=trans, 1=skin/primary, 2=hair/sec, 3=shirt/tertiary, 4=pants/quart
+      const SPRITES = {
+        // Tintin Walk Cycle (16x16)
+        tintin: [
+          [
+            // Frame 0 (Stand)
+            [0, 0, 0, 0, 0, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0], // Hair tuft
+            [0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 2, 2, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 2, 1, 1, 1, 1, 1, 2, 0, 0, 0, 0, 0], // Ears
+            [0, 0, 0, 0, 1, 1, 2, 1, 2, 1, 1, 0, 0, 0, 0, 0], // Eyes
+            [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0], // Neck
+            [0, 0, 0, 0, 3, 3, 3, 1, 3, 3, 3, 0, 0, 0, 0, 0], // Collar
+            [0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0], // Sweater
+            [0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0],
+            [0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0],
+            [0, 0, 0, 0, 4, 4, 4, 4, 4, 4, 4, 0, 0, 0, 0, 0], // Pants
+            [0, 0, 0, 0, 4, 4, 4, 4, 4, 4, 4, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 4, 4, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0], // Legs
+            [0, 0, 0, 0, 5, 5, 0, 0, 0, 5, 5, 0, 0, 0, 0, 0], // Socks (White - uses 5 if avail, fallback logic below)
+            [0, 0, 0, 4, 4, 4, 0, 0, 0, 4, 4, 4, 0, 0, 0, 0], // Shoes
+          ],
+          [
+            // Frame 1 (Walk)
+            [0, 0, 0, 0, 0, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 2, 2, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 2, 1, 1, 1, 1, 1, 2, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 1, 1, 2, 1, 2, 1, 1, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 3, 3, 3, 1, 3, 3, 3, 0, 0, 0, 0, 0],
+            [0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0],
+            [0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0],
+            [0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0],
+            [0, 0, 0, 0, 4, 4, 4, 4, 4, 4, 4, 0, 0, 0, 0, 0],
+            [0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0], // Legs wide
+            [0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0],
+            [0, 0, 0, 5, 5, 0, 0, 0, 0, 0, 5, 5, 0, 0, 0, 0],
+            [0, 0, 4, 4, 4, 0, 0, 0, 0, 0, 4, 4, 4, 0, 0, 0],
+          ],
+        ],
+        milou: [
+          [
+            // Frame 0
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 1, 0, 0, 0, 0, 0], // Eye
+            [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 0, 0, 0, 0, 0], // Nose
+            [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0], // Ear
+            [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
+            [0, 1, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0], // Tail
+            [0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+          ],
+          [
+            // Frame 1
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 1, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
+            [0, 0, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0], // Legs Move
+            [0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+          ],
+        ],
+        haddock: [
+          [0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0], // Hat
+          [0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0],
+          [0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0],
+          [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0], // Face
+          [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
+          [0, 0, 0, 0, 1, 2, 1, 2, 1, 1, 2, 1, 1, 0, 0, 0], // Eyes/Hair
+          [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
+          [0, 0, 0, 0, 1, 4, 4, 4, 4, 4, 4, 4, 1, 0, 0, 0], // Beard
+          [0, 0, 0, 0, 4, 4, 4, 4, 4, 4, 4, 4, 4, 0, 0, 0],
+          [0, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0], // Sweater
+          [0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0],
+          [0, 0, 0, 3, 3, 3, 3, 3, 2, 2, 3, 3, 3, 3, 0, 0], // Anchor
+          [0, 0, 0, 3, 3, 3, 3, 3, 2, 2, 3, 3, 3, 3, 0, 0],
+          [0, 0, 0, 0, 4, 4, 4, 4, 4, 4, 4, 4, 0, 0, 0, 0], // Pants
+          [0, 0, 0, 0, 4, 4, 4, 4, 4, 4, 4, 4, 0, 0, 0, 0],
+          [0, 0, 0, 0, 4, 4, 4, 0, 0, 4, 4, 4, 0, 0, 0, 0],
+        ],
+        house: [
+          [0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0], // Roof
+          [0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0],
+          [0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0],
+          [2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 0, 0], // Wall
+          [2, 1, 1, 3, 3, 3, 3, 3, 3, 3, 3, 1, 1, 2, 0, 0], // Balcony Rail
+          [2, 1, 1, 4, 4, 4, 4, 4, 4, 4, 4, 1, 1, 2, 0, 0], // Window Glass (4)
+          [2, 1, 1, 4, 4, 4, 4, 4, 4, 4, 4, 1, 1, 2, 0, 0],
+          [2, 1, 1, 4, 4, 4, 4, 4, 4, 4, 4, 1, 1, 2, 0, 0],
+          [2, 1, 1, 4, 4, 4, 4, 4, 4, 4, 4, 1, 1, 2, 0, 0],
+          [2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 0, 0],
+          [2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 0, 0],
+          [2, 1, 1, 4, 4, 4, 1, 1, 4, 4, 4, 1, 1, 2, 0, 0], // Doors/Windows
+          [2, 1, 1, 4, 4, 4, 1, 1, 4, 4, 4, 1, 1, 2, 0, 0],
+          [2, 1, 1, 4, 4, 4, 1, 1, 4, 4, 4, 1, 1, 2, 0, 0],
+          [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0],
+          [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0],
+        ],
+        clue: [
+          [0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
+          [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0],
+          [0, 1, 1, 2, 2, 2, 2, 2, 2, 1, 1, 0, 0, 0, 0, 0],
+          [0, 1, 2, 1, 1, 1, 1, 1, 1, 2, 1, 0, 0, 0, 0, 0],
+          [0, 1, 2, 1, 1, 2, 2, 1, 1, 2, 1, 0, 0, 0, 0, 0], // "?" mark shape
+          [0, 1, 2, 1, 1, 1, 2, 1, 1, 2, 1, 0, 0, 0, 0, 0],
+          [0, 1, 2, 1, 1, 2, 1, 1, 1, 2, 1, 0, 0, 0, 0, 0],
+          [0, 1, 2, 1, 1, 2, 1, 1, 1, 2, 1, 0, 0, 0, 0, 0],
+          [0, 1, 2, 1, 1, 0, 1, 1, 1, 2, 1, 0, 0, 0, 0, 0],
+          [0, 1, 2, 1, 1, 2, 1, 1, 1, 2, 1, 0, 0, 0, 0, 0],
+          [0, 1, 1, 2, 2, 2, 2, 2, 2, 1, 1, 0, 0, 0, 0, 0],
+          [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0],
+          [0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
+          [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+          [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+          [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        ],
+        // Portrait Components reused from previous logic, but ensure they are safe
+        portraits: {
+          base: [
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0],
+            [0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0],
+            [0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0],
+            [0, 0, 1, 1, 1, 2, 2, 1, 1, 2, 2, 1, 1, 0, 0, 0], // Eyes
+            [0, 0, 1, 1, 1, 2, 2, 1, 1, 2, 2, 1, 1, 0, 0, 0],
+            [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
+            [0, 0, 1, 1, 1, 1, 1, 3, 3, 1, 1, 1, 1, 0, 0, 0], // Nose
+            [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
+            [0, 0, 0, 1, 1, 1, 1, 4, 4, 1, 1, 1, 0, 0, 0, 0], // Mouth
+            [0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0],
+            [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 5, 5, 5, 5, 5, 5, 5, 0, 0, 0, 0, 0], // Clothes
+            [0, 0, 0, 5, 5, 5, 5, 5, 5, 5, 5, 5, 0, 0, 0, 0],
+            [0, 0, 0, 5, 5, 5, 5, 5, 5, 5, 5, 5, 0, 0, 0, 0],
+          ],
+          hat: [
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0],
+            [0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0],
+            [0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+          ],
+          glasses: [
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 2, 2, 2, 2, 2, 0, 0, 2, 2, 2, 2, 2, 0, 0],
+            [0, 0, 2, 2, 2, 2, 2, 0, 0, 2, 2, 2, 2, 2, 0, 0],
+            [0, 0, 2, 2, 2, 2, 2, 0, 0, 2, 2, 2, 2, 2, 0, 0],
+          ],
+          mustache: [
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0],
+            [0, 0, 0, 2, 2, 0, 0, 0, 0, 0, 2, 2, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+          ],
+          haddock: [
+            [0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0],
+            [0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0],
+            [0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0],
+            [0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0],
+            [0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0],
+            [0, 0, 1, 1, 1, 4, 4, 1, 1, 4, 4, 1, 1, 0, 0, 0],
+            [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
+            [0, 0, 1, 1, 4, 4, 4, 4, 4, 4, 4, 1, 1, 0, 0, 0],
+            [0, 0, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 0, 0, 0],
+            [0, 0, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 0, 0, 0],
+            [0, 0, 0, 4, 4, 4, 4, 4, 4, 4, 4, 4, 0, 0, 0, 0],
+            [0, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 0],
+            [0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0],
+            [0, 0, 0, 3, 3, 3, 0, 0, 0, 3, 3, 3, 0, 0, 0, 0],
+            [0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0],
+            [0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0],
+          ],
+        },
+      };
+
+      // --- Initialization ---
+      const canvas = document.getElementById("gameCanvas");
+      const ctx = canvas.getContext("2d");
+
+      function init() {
+        solution.suspect =
+          SUSPECTS[Math.floor(Math.random() * SUSPECTS.length)];
+        solution.location =
+          LOCATIONS[Math.floor(Math.random() * LOCATIONS.length)];
+
+        generateClues();
+
+        // Init Milou history
+        for (let i = 0; i < 10; i++) {
+          player.history.push({ x: player.x, y: player.y });
+        }
+
+        const inputHandler = (e) => {
+          AudioSynth.init();
+          if (e.type === "keydown") keys[e.key] = true;
+          if (e.type === "keyup") keys[e.key] = false;
+          if (
+            ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)
+          )
+            e.preventDefault();
+        };
+
+        window.addEventListener("keydown", inputHandler);
+        window.addEventListener("keyup", inputHandler);
+
+        // Touch inputs
+        const btns = document.querySelectorAll(".d-btn, .a-btn, .b-btn");
+        btns.forEach((btn) => {
+          btn.addEventListener("touchstart", (e) => {
+            e.preventDefault();
+            AudioSynth.init();
+            keys[btn.dataset.key] = true;
+          });
+          btn.addEventListener("touchend", (e) => {
+            e.preventDefault();
+            keys[btn.dataset.key] = false;
+          });
+        });
+
+        requestAnimationFrame(gameLoop);
+      }
+
+      function generateClues() {
+        mapObjects = [];
+
+        // 1. Generate 2 Proof Cards
+        let missingTraits = ATTRIBUTES.filter(
+          (t) => !solution.suspect.traits.includes(t)
+        );
+        missingTraits.sort(() => Math.random() - 0.5);
+        const proofTraits = missingTraits.slice(0, 2);
+
+        proofTraits.forEach((trait) => {
+          placeObject("proof", trait);
+        });
+
+        // 2. Generate Location Clues
+        let wrongLocations = LOCATIONS.filter(
+          (l) => l.name !== solution.location.name
+        );
+        wrongLocations.sort(() => Math.random() - 0.5);
+
+        for (let i = 0; i < 3; i++) {
+          placeObject("location", wrongLocations[i].name);
+        }
+
+        placeObject("police", "Polisstation");
+      }
+
+      function placeObject(type, value) {
+        let placed = false;
+        while (!placed) {
+          let tx = Math.floor(Math.random() * 14) + 1;
+          let ty = Math.floor(Math.random() * 13) + 1;
+          let x = tx * TILE_SIZE;
+          let y = ty * TILE_SIZE;
+
+          let distP = Math.abs(x - player.x) + Math.abs(y - player.y);
+          let distH = Math.abs(x - haddock.x) + Math.abs(y - haddock.y);
+
+          let onBuilding = false;
+          LOCATIONS.forEach((loc) => {
+            if (
+              tx >= loc.x &&
+              tx <= loc.x + 3 &&
+              ty >= loc.y &&
+              ty <= loc.y + 2
+            )
+              onBuilding = true;
+          });
+
+          if (distP > 32 && distH > 32 && !onBuilding) {
+            mapObjects.push({ x, y, type, value, collected: false });
+            placed = true;
+          }
+        }
+      }
+
+      // --- Main Loop ---
+      function gameLoop() {
+        update();
+        draw();
+        lastKeys = { ...keys };
+        frameCount++;
+        requestAnimationFrame(gameLoop);
+      }
+
+      function isKeyPressed(key) {
+        if (key === "z") return keys["z"] || keys["Z"];
+        if (key === "x") return keys["x"] || keys["X"];
+        return keys[key];
+      }
+
+      function isKeyJustPressed(key) {
+        let curr = isKeyPressed(key);
+        let last =
+          key === "z"
+            ? lastKeys["z"] || lastKeys["Z"]
+            : key === "x"
+            ? lastKeys["x"] || lastKeys["X"]
+            : lastKeys[key];
+        return curr && !last;
+      }
+
+      // --- Update ---
+      function update() {
+        if (currentState === STATE.START) {
+          if (isKeyJustPressed("Enter") || isKeyJustPressed("z")) {
+            AudioSynth.sfx.collect();
+            currentState = STATE.INTRO;
+          }
+          return;
+        }
+
+        if (currentState === STATE.INTRO) {
+          if (isKeyJustPressed("z") || frameCount > 300) {
+            currentState = STATE.PLAYING;
+          }
+          return;
+        }
+
+        if (currentState === STATE.WIN || currentState === STATE.LOSE) {
+          if (isKeyJustPressed("z")) {
+            location.reload();
+          }
+          return;
+        }
+
+        if (currentState === STATE.NOTEBOOK) {
+          if (isKeyJustPressed("x")) currentState = STATE.PLAYING;
+          return;
+        }
+
+        if (currentState === STATE.ACCUSE) {
+          if (isKeyJustPressed("x")) currentState = STATE.PLAYING;
+
+          if (isKeyJustPressed("ArrowUp")) {
+            AudioSynth.sfx.step();
+            if (accuseStep === 0)
+              accuseSelection.suspect =
+                (accuseSelection.suspect - 1 + SUSPECTS.length) %
+                SUSPECTS.length;
+            else
+              accuseSelection.location =
+                (accuseSelection.location - 1 + LOCATIONS.length) %
+                LOCATIONS.length;
+          }
+          if (isKeyJustPressed("ArrowDown")) {
+            AudioSynth.sfx.step();
+            if (accuseStep === 0)
+              accuseSelection.suspect =
+                (accuseSelection.suspect + 1) % SUSPECTS.length;
+            else
+              accuseSelection.location =
+                (accuseSelection.location + 1) % LOCATIONS.length;
+          }
+
+          if (isKeyJustPressed("z")) {
+            if (accuseStep === 0) {
+              AudioSynth.sfx.collect();
+              accuseStep = 1;
+            } else {
+              checkAccusation();
+            }
+          }
+          return;
+        }
+
+        if (showMessage) {
+          if (isKeyJustPressed("z")) {
+            showMessage = null;
+            currentMessagePortrait = null;
+          }
+          return;
+        }
+
+        // Player Movement
+        let dx = 0;
+        let dy = 0;
+        const speed = 1.5;
+        player.moving = false;
+
+        if (isKeyPressed("ArrowLeft")) dx = -speed;
+        if (isKeyPressed("ArrowRight")) dx = speed;
+        if (isKeyPressed("ArrowUp")) dy = -speed;
+        if (isKeyPressed("ArrowDown")) dy = speed;
+
+        if (dx !== 0 || dy !== 0) {
+          player.moving = true;
+          if (frameCount % 20 === 0) AudioSynth.sfx.step();
+        }
+
+        let nextX = player.x + dx;
+        let nextY = player.y + dy;
+
+        if (nextX >= 0 && nextX <= CANVAS_W - TILE_SIZE) {
+          if (Math.hypot(nextX - haddock.x, player.y - haddock.y) > 12)
+            player.x = nextX;
+        }
+        if (nextY >= 0 && nextY <= CANVAS_H - TILE_SIZE) {
+          if (Math.hypot(player.x - haddock.x, nextY - haddock.y) > 12)
+            player.y = nextY;
+        }
+
+        // Milou
+        if (dx !== 0 || dy !== 0) {
+          if (frameCount % 10 === 0) {
+            player.history.push({
+              x: player.x,
+              y: player.y,
+              moving: player.moving,
+            });
+            if (player.history.length > 10) player.history.shift();
+          }
+        }
+
+        if (isKeyJustPressed("x")) {
+          AudioSynth.sfx.step();
+          currentState = STATE.NOTEBOOK;
+        }
+
+        if (isKeyJustPressed("z")) {
+          checkInteraction();
+        }
+      }
+
+      function checkInteraction() {
+        if (Math.hypot(player.x - haddock.x, player.y - haddock.y) < 20) {
+          AudioSynth.sfx.haddock();
+          let quote =
+            HADDOCK_QUOTES[Math.floor(Math.random() * HADDOCK_QUOTES.length)];
+          showMessage = ["KAPTEN HADDOCK:", "", quote];
+          currentMessagePortrait = "haddock";
+          return;
+        }
+
+        for (let obj of mapObjects) {
+          if (obj.collected && obj.type !== "police") continue;
+
+          let dist = Math.hypot(player.x - obj.x, player.y - obj.y);
+          if (dist < 16) {
+            if (obj.type === "proof") {
+              AudioSynth.sfx.collect();
+              obj.collected = true;
+              cluesFound.push({ type: "trait", value: obj.value });
+              showMessage = [
+                "BEVIS HITTAT!",
+                "",
+                "En tappad " + obj.value + "!",
+                "",
+                "Kidnapparen har",
+                "INTE " + obj.value + ".",
+              ];
+            } else if (obj.type === "location") {
+              AudioSynth.sfx.collect();
+              obj.collected = true;
+              cluesFound.push({ type: "location", value: obj.value });
+              showMessage = [
+                "VITTNESMÅL:",
+                "",
+                "Såg något misstänkt,",
+                "men INTE vid",
+                obj.value + ".",
+              ];
+            } else if (obj.type === "police") {
+              AudioSynth.sfx.collect();
+              currentState = STATE.ACCUSE;
+              accuseStep = 0;
+            }
+            return;
+          }
+        }
+      }
+
+      function checkAccusation() {
+        let s = SUSPECTS[accuseSelection.suspect];
+        let l = LOCATIONS[accuseSelection.location];
+
+        if (s.id === solution.suspect.id && l.name === solution.location.name) {
+          AudioSynth.sfx.win();
+          currentState = STATE.WIN;
+        } else {
+          AudioSynth.sfx.error();
+          currentState = STATE.LOSE;
+        }
+      }
+
+      // --- Rendering ---
+      function draw() {
+        ctx.fillStyle = PALETTE.bg;
+        ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+        if (currentState === STATE.START) {
+          drawTextCentered("TINTINS ÄVENTYR", 40, "#FF0000", 1.2);
+          drawTextCentered("MYSTERIET MED", 60, "#FFFFFF", 1.0);
+          drawTextCentered("PROFESSOR KALKYLS", 80, "#FF0000", 1.2);
+          drawTextCentered("KIDNAPPNING", 100, "#FFFF00", 1.2);
+
+          drawSprite(
+            SPRITES.tintin[0],
+            CANVAS_W / 2 - 20,
+            130,
+            PALETTE.tintinFace,
+            PALETTE.tintinHair,
+            PALETTE.tintinShirt,
+            PALETTE.tintinPants,
+            PALETTE.white
+          );
+          drawSprite(
+            SPRITES.milou[0],
+            CANVAS_W / 2 + 10,
+            138,
+            PALETTE.milouWhite,
+            PALETTE.black
+          );
+
+          if (Math.floor(frameCount / 30) % 2 === 0) {
+            drawTextCentered("TRYCK Z FÖR ATT STARTA", 180, PALETTE.clueOrange);
+          }
+          return;
+        }
+
+        if (currentState === STATE.INTRO) {
+          let y = 200 - frameCount * 0.5;
+          ctx.save();
+          drawTextCentered("PARIS - 1985", 30, PALETTE.clueBlue);
+          let story = [
+            "Professor Kalkyl",
+            "är borta!",
+            "",
+            "Spår av strid",
+            "i labbet.",
+            "",
+            "Hitta huset.",
+            "Hitta kidnapparen.",
+            "",
+            "Använd logik.",
+            "Eliminera misstänkta.",
+          ];
+          for (let i = 0; i < story.length; i++) {
+            drawTextCentered(story[i], 60 + i * 15, PALETTE.white);
+          }
+          ctx.restore();
+          return;
+        }
+
+        if (currentState === STATE.PLAYING || showMessage) {
+          drawMap();
+
+          // Haddock (Using 16x16 Tintin colors + Haddock Palette)
+          drawSprite(
+            SPRITES.haddock,
+            haddock.x,
+            haddock.y,
+            PALETTE.tintinFace,
+            PALETTE.haddockHat,
+            PALETTE.haddockBlue,
+            PALETTE.black
+          );
+
+          // Objects
+          mapObjects.forEach((obj) => {
+            if (!obj.collected || obj.type === "police") {
+              if (obj.type === "proof")
+                drawSprite(
+                  SPRITES.clue,
+                  obj.x,
+                  obj.y,
+                  PALETTE.clueOrange,
+                  PALETTE.black
+                );
+              else if (obj.type === "location")
+                drawSprite(
+                  SPRITES.clue,
+                  obj.x,
+                  obj.y,
+                  PALETTE.clueBlue,
+                  PALETTE.black
+                );
+              else if (obj.type === "police") {
+                ctx.fillStyle = PALETTE.white;
+                ctx.fillRect(obj.x + 4, obj.y + 4, 8, 8);
+                ctx.fillStyle = "blue";
+                ctx.fillRect(obj.x + 6, obj.y + 6, 4, 4);
+              }
+            }
+          });
+
+          // Animation
+          let animFrame = player.moving ? Math.floor(frameCount / 10) % 2 : 0;
+
+          // Milou
+          let milouPos = player.history.length > 0 ? player.history[0] : player;
+          let milouFrame = milouPos.moving || player.moving ? animFrame : 0;
+          drawSprite(
+            SPRITES.milou[milouFrame],
+            milouPos.x,
+            milouPos.y,
+            PALETTE.milouWhite,
+            PALETTE.black
+          );
+
+          // Tintin
+          drawSprite(
+            SPRITES.tintin[animFrame],
+            player.x,
+            player.y,
+            PALETTE.tintinFace,
+            PALETTE.tintinHair,
+            PALETTE.tintinShirt,
+            PALETTE.tintinPants,
+            PALETTE.white
+          );
+
+          // HUD
+          ctx.fillStyle = "#000";
+          ctx.fillRect(0, 0, CANVAS_W, 16);
+          ctx.fillStyle = "#FFF";
+          ctx.font = '8px "Press Start 2P"';
+          ctx.fillText(`LEDTRÅDAR: ${cluesFound.length}/5`, 8, 12);
+          ctx.fillText(`[X] BOK`, 200, 12);
+        }
+
+        if (showMessage) {
+          let boxX = 20;
+          let boxW = 216;
+          let textX = 30;
+
+          if (currentMessagePortrait === "haddock") {
+            drawBox(boxX, 80, boxW, 80);
+            drawPortrait("haddock", null, boxX + 10, 90, 3);
+            textX += 50;
+          } else {
+            drawBox(boxX, 80, boxW, 80);
+          }
+
+          ctx.fillStyle = PALETTE.text; // Black text
+          for (let i = 0; i < showMessage.length; i++) {
+            ctx.fillText(showMessage[i], textX, 100 + i * 10);
+          }
+          if (Math.floor(frameCount / 30) % 2 === 0) {
+            ctx.fillText(">", 220, 150);
+          }
+        }
+
+        if (currentState === STATE.NOTEBOOK) {
+          drawNotebook();
+        }
+
+        if (currentState === STATE.ACCUSE) {
+          drawAccuse();
+        }
+
+        if (currentState === STATE.WIN) {
+          drawBox(40, 60, 176, 120);
+          drawTextCentered("GRATTIS!", 80, "#00FF00");
+          drawTextCentered("Du hittade honom!", 100, PALETTE.text);
+          drawTextCentered("Kalkyl är räddad.", 120, PALETTE.text);
+          drawTextCentered("Tryck Z", 160, PALETTE.text);
+        }
+
+        if (currentState === STATE.LOSE) {
+          drawBox(40, 60, 176, 120);
+          drawTextCentered("GAME OVER", 80, "#FF0000");
+          drawTextCentered("Fel misstänkt!", 100, PALETTE.text);
+          drawTextCentered("Skurkarna flydde.", 120, PALETTE.text);
+          drawTextCentered("Tryck Z", 160, PALETTE.text);
+        }
+      }
+
+      function drawMap() {
+        // Fill background (Road color)
+        ctx.fillStyle = PALETTE.road;
+        ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+        // Draw Locations
+        LOCATIONS.forEach((loc) => {
+          let lx = loc.x * TILE_SIZE;
+          let ly = loc.y * TILE_SIZE;
+
+          // Building
+          for (let r = 0; r < 3; r++) {
+            for (let c = 0; c < 4; c++) {
+              drawSprite(
+                SPRITES.house,
+                lx + c * 16,
+                ly + r * 16,
+                PALETTE.buildingWall,
+                PALETTE.buildingRoof,
+                PALETTE.white,
+                PALETTE.window
+              );
+            }
+          }
+
+          ctx.fillStyle = "#FFF";
+          ctx.font = '8px "Press Start 2P"';
+          // Add shadow for better readability
+          ctx.fillStyle = "#000";
+          ctx.fillText(loc.name.substr(0, 10), lx - 7, ly - 3);
+          ctx.fillStyle = "#FFF";
+          ctx.fillText(loc.name.substr(0, 10), lx - 8, ly - 4);
+        });
+      }
+
+      function drawNotebook() {
+        ctx.fillStyle = PALETTE.uiBg;
+        ctx.fillRect(10, 10, CANVAS_W - 20, CANVAS_H - 20);
+        ctx.strokeStyle = PALETTE.uiBorder;
+        ctx.strokeRect(12, 12, CANVAS_W - 24, CANVAS_H - 24);
+
+        ctx.fillStyle = PALETTE.white;
+        ctx.font = '8px "Press Start 2P"';
+        ctx.fillText("-- ANTECKNINGSBOK --", 40, 30);
+
+        let y = 50;
+        ctx.fillText("MISSTÄNKTA:", 20, y);
+        y += 15;
+
+        let eliminatedTraits = cluesFound
+          .filter((c) => c.type === "trait")
+          .map((c) => c.value);
+
+        SUSPECTS.forEach((s) => {
+          let innocent = false;
+          eliminatedTraits.forEach((trait) => {
+            if (s.traits.includes(trait)) innocent = true;
+          });
+
+          let prefix = innocent ? "X " : "  ";
+          let color = innocent ? "#555" : "#FFF";
+          ctx.fillStyle = color;
+          ctx.fillText(prefix + s.name, 20, y);
+
+          if (!innocent) {
+            drawPortrait("suspect", s.traits, 150, y - 8, 1);
+          }
+
+          y += 16;
+        });
+
+        y = 150;
+        ctx.fillStyle = "#FFF";
+        ctx.fillText("PLATSER:", 20, y);
+        y += 15;
+
+        let eliminatedLocs = cluesFound
+          .filter((c) => c.type === "location")
+          .map((c) => c.value);
+
+        LOCATIONS.forEach((l) => {
+          let innocent = eliminatedLocs.includes(l.name);
+          let prefix = innocent ? "X " : "  ";
+          let color = innocent ? "#555" : "#FFF";
+          ctx.fillStyle = color;
+          ctx.fillText(prefix + l.name, 20, y);
+          y += 10;
+        });
+
+        ctx.fillStyle = PALETTE.clueOrange;
+        ctx.fillText("TRYCK X FÖR STÄNG", 70, 220);
+      }
+
+      function drawAccuse() {
+        drawBox(30, 30, 196, 180);
+        drawTextCentered("PEKA UT SKURKEN", 50, PALETTE.text);
+
+        ctx.fillStyle = accuseStep === 0 ? "#D35400" : "#888";
+        ctx.fillText("VEM:", 50, 70);
+        ctx.fillText(
+          "< " + SUSPECTS[accuseSelection.suspect].name + " >",
+          80,
+          85
+        );
+
+        let s = SUSPECTS[accuseSelection.suspect];
+        drawPortrait("suspect", s.traits, 110, 95, 3);
+
+        ctx.font = '8px "Press Start 2P"';
+        ctx.fillStyle = accuseStep === 1 ? "#D35400" : "#888";
+        ctx.fillText("VAR:", 50, 155);
+        ctx.fillText(
+          "< " + LOCATIONS[accuseSelection.location].name + " >",
+          80,
+          170
+        );
+
+        ctx.fillStyle = PALETTE.text;
+        ctx.fillText("Z FÖR ATT BEKRÄFTA", 60, 200);
+      }
+
+      function drawPortrait(type, traits, x, y, scale = 1) {
+        const drawP = (data, cOverride) => {
+          if (!data) return;
+          for (let r = 0; r < data.length; r++) {
+            if (!data[r]) continue;
+            for (let c = 0; c < data[r].length; c++) {
+              let v = data[r][c];
+              if (v === 0) continue;
+              let col = "#FFF";
+              if (v === 1) col = PALETTE.tintinFace;
+              if (v === 2) col = "#000";
+              if (v === 3) col = PALETTE.haddockBlue;
+              if (v === 4) col = "#222";
+              if (v === 5) col = "#444";
+
+              ctx.fillStyle = col;
+              ctx.fillRect(x + c * scale, y + r * scale, scale, scale);
+            }
+          }
+        };
+
+        if (type === "haddock") {
+          drawP(SPRITES.portraits.haddock);
+        } else {
+          drawP(SPRITES.portraits.base);
+          if (traits) {
+            if (traits.includes("Hatt")) drawP(SPRITES.portraits.hat);
+            if (traits.includes("Solglasögon"))
+              drawP(SPRITES.portraits.glasses);
+            if (traits.includes("Mustasch")) drawP(SPRITES.portraits.mustache);
+          }
+        }
+      }
+
+      function drawBox(x, y, w, h) {
+        // Drop shadow
+        ctx.fillStyle = "#000";
+        ctx.fillRect(x + 4, y + 4, w, h);
+        // Main box
+        ctx.fillStyle = PALETTE.comicBg; // White
+        ctx.fillRect(x, y, w, h);
+        ctx.strokeStyle = "#000";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x, y, w, h);
+      }
+
+      function drawTextCentered(text, y, color = "#FFF", scale = 1) {
+        ctx.fillStyle = color;
+        ctx.save();
+        ctx.font = 8 * scale + 'px "Press Start 2P"';
+        let width = ctx.measureText(text).width;
+        ctx.fillText(text, (CANVAS_W - width) / 2, y);
+        ctx.restore();
+      }
+
+      function drawSprite(data, x, y, c1, c2, c3, c4, c5) {
+        let size = data.length === 8 ? 2 : 1;
+
+        for (let r = 0; r < data.length; r++) {
+          for (let c = 0; c < data[r].length; c++) {
+            let val = data[r][c];
+            if (val === 0) continue;
+
+            if (val === 1) ctx.fillStyle = c1;
+            else if (val === 2) ctx.fillStyle = c2 || c1;
+            else if (val === 3) ctx.fillStyle = c3 || c1;
+            else if (val === 4) ctx.fillStyle = c4 || c1;
+            else if (val === 5) ctx.fillStyle = c5 || c1;
+
+            ctx.fillRect(x + c * size, y + r * size, size, size);
+          }
+        }
+      }
+
+      window.onload = init;
+    </script>
+  </body>
+</html>
