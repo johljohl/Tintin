@@ -34,10 +34,13 @@
 
       #game-container {
         position: relative;
-        width: 768px; /* 256 * 3 */
-        height: 720px; /* 240 * 3 */
-        max-width: 100vw;
-        max-height: 100vh;
+        /* FIX: Använd 4:3 Aspect Ratio för att simulera en gammal TV. 
+               Detta gör att spelet ser mindre "smalt" eller "hoptryckt" ut. */
+        height: 90vh;
+        aspect-ratio: 4/3;
+        width: auto;
+        max-width: 95vw; /* Säkerställer att den får plats på mobiler */
+
         background-color: var(--nes-black);
         box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
         border: 4px solid #333;
@@ -200,8 +203,7 @@
     <script>
       /**
        * TINTINS ÄVENTYR: MYSTERIET MED PROFESSOR KALKYLS KIDNAPPNING
-       * Version 4.1 - Clean Graphics (No Noise)
-       * Features: 16x16 Sprites, Solid Colors, Comic UI, Audio, Animation
+       * Version 5.2 - Paged Notebook
        */
 
       // --- Constants & Config ---
@@ -209,17 +211,17 @@
       const CANVAS_H = 240;
       const TILE_SIZE = 16;
 
-      // Colors (Updated for better visuals)
+      // Colors
       const PALETTE = {
         black: "#000000",
         white: "#FFFFFF",
         bg: "#111111",
-        text: "#000000", // Comic text is black
+        text: "#000000",
         comicBg: "#FFFFFF",
-        tintinFace: "#FFDDBB", // Lighter skin tone
-        tintinHair: "#E67E22", // More vibrant orange
-        tintinShirt: "#3498DB", // Iconic blue
-        tintinPants: "#8D6E63", // Brown
+        tintinFace: "#FFDDBB",
+        tintinHair: "#E67E22",
+        tintinShirt: "#3498DB",
+        tintinPants: "#8D6E63",
         milouWhite: "#F0F0F0",
         haddockBlue: "#1A237E",
         haddockHat: "#212121",
@@ -227,12 +229,14 @@
         grassDark: "#388E3C",
         road: "#757575",
         roadDark: "#616161",
-        buildingWall: "#F5F5DC", // Beige/Cream
-        buildingRoof: "#546E7A", // Slate Blue/Grey
+        buildingWall: "#F5F5DC",
+        buildingRoof: "#546E7A",
         window: "#81D4FA",
         clueOrange: "#FF9800",
         clueBlue: "#29B6F6",
         uiBorder: "#000000",
+        innocent: "#AA0000", // Red for crossed out/innocent
+        suspect: "#000000",
       };
 
       // --- Audio System ---
@@ -289,6 +293,16 @@
               () => AudioSynth.playTone(80, "sawtooth", 0.2, 0.1),
               100
             );
+          },
+          bark: () => {
+            AudioSynth.playTone(300, "square", 0.08, 0.1);
+            setTimeout(
+              () => AudioSynth.playTone(200, "sawtooth", 0.1, 0.1),
+              60
+            );
+          },
+          page: () => {
+            AudioSynth.playTone(400, "triangle", 0.05, 0.05);
           },
         },
 
@@ -359,6 +373,8 @@
       let accuseStep = 0;
       let accuseSelection = { suspect: 0, location: 0 };
       let haddock = { x: 4 * TILE_SIZE, y: 4 * TILE_SIZE };
+      let milouBarkState = { active: false, timer: 0, found: false };
+      let notebookPage = 0; // 0 to SUSPECTS.length (last page is locations)
 
       const HADDOCK_QUOTES = [
         "Anfäkta och anamma!",
@@ -370,32 +386,11 @@
         "Håll ögonen öppna Tintin!",
       ];
 
-      // --- Sprites & Animation (16x16) ---
-      // 0=trans, 1=skin/primary, 2=hair/sec, 3=shirt/tertiary, 4=pants/quart
+      // --- Sprites (16x16) ---
       const SPRITES = {
-        // Tintin Walk Cycle (16x16)
         tintin: [
           [
-            // Frame 0 (Stand)
-            [0, 0, 0, 0, 0, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0], // Hair tuft
-            [0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 2, 2, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 2, 1, 1, 1, 1, 1, 2, 0, 0, 0, 0, 0], // Ears
-            [0, 0, 0, 0, 1, 1, 2, 1, 2, 1, 1, 0, 0, 0, 0, 0], // Eyes
-            [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0], // Neck
-            [0, 0, 0, 0, 3, 3, 3, 1, 3, 3, 3, 0, 0, 0, 0, 0], // Collar
-            [0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0], // Sweater
-            [0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0],
-            [0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0],
-            [0, 0, 0, 0, 4, 4, 4, 4, 4, 4, 4, 0, 0, 0, 0, 0], // Pants
-            [0, 0, 0, 0, 4, 4, 4, 4, 4, 4, 4, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 4, 4, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0], // Legs
-            [0, 0, 0, 0, 5, 5, 0, 0, 0, 5, 5, 0, 0, 0, 0, 0], // Socks (White - uses 5 if avail, fallback logic below)
-            [0, 0, 0, 4, 4, 4, 0, 0, 0, 4, 4, 4, 0, 0, 0, 0], // Shoes
-          ],
-          [
-            // Frame 1 (Walk)
+            // Frame 0
             [0, 0, 0, 0, 0, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0],
             [0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0],
             [0, 0, 0, 0, 2, 2, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
@@ -408,7 +403,26 @@
             [0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0],
             [0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0],
             [0, 0, 0, 0, 4, 4, 4, 4, 4, 4, 4, 0, 0, 0, 0, 0],
-            [0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0], // Legs wide
+            [0, 0, 0, 0, 4, 4, 4, 4, 4, 4, 4, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 4, 4, 0, 0, 0, 4, 4, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 5, 5, 0, 0, 0, 5, 5, 0, 0, 0, 0, 0],
+            [0, 0, 0, 4, 4, 4, 0, 0, 0, 4, 4, 4, 0, 0, 0, 0],
+          ],
+          [
+            // Frame 1
+            [0, 0, 0, 0, 0, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 2, 2, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 2, 1, 1, 1, 1, 1, 2, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 1, 1, 2, 1, 2, 1, 1, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 3, 3, 3, 1, 3, 3, 3, 0, 0, 0, 0, 0],
+            [0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0],
+            [0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0],
+            [0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0],
+            [0, 0, 0, 0, 4, 4, 4, 4, 4, 4, 4, 0, 0, 0, 0, 0],
+            [0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0],
             [0, 0, 0, 4, 4, 0, 0, 0, 0, 0, 4, 4, 0, 0, 0, 0],
             [0, 0, 0, 5, 5, 0, 0, 0, 0, 0, 5, 5, 0, 0, 0, 0],
             [0, 0, 4, 4, 4, 0, 0, 0, 0, 0, 4, 4, 4, 0, 0, 0],
@@ -448,43 +462,43 @@
             [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0],
             [0, 0, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
             [0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0], // Legs Move
+            [0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
             [0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
             [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
             [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
           ],
         ],
         haddock: [
-          [0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0], // Hat
+          [0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0],
           [0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0],
           [0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0],
-          [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0], // Face
+          [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0],
           [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
-          [0, 0, 0, 0, 1, 2, 1, 2, 1, 1, 2, 1, 1, 0, 0, 0], // Eyes/Hair
+          [0, 0, 0, 0, 1, 2, 1, 2, 1, 1, 2, 1, 1, 0, 0, 0],
           [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
-          [0, 0, 0, 0, 1, 4, 4, 4, 4, 4, 4, 4, 1, 0, 0, 0], // Beard
+          [0, 0, 0, 0, 1, 4, 4, 4, 4, 4, 4, 4, 1, 0, 0, 0],
           [0, 0, 0, 0, 4, 4, 4, 4, 4, 4, 4, 4, 4, 0, 0, 0],
-          [0, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0], // Sweater
+          [0, 0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0],
           [0, 0, 0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0],
-          [0, 0, 0, 3, 3, 3, 3, 3, 2, 2, 3, 3, 3, 3, 0, 0], // Anchor
           [0, 0, 0, 3, 3, 3, 3, 3, 2, 2, 3, 3, 3, 3, 0, 0],
-          [0, 0, 0, 0, 4, 4, 4, 4, 4, 4, 4, 4, 0, 0, 0, 0], // Pants
+          [0, 0, 0, 3, 3, 3, 3, 3, 2, 2, 3, 3, 3, 3, 0, 0],
+          [0, 0, 0, 0, 4, 4, 4, 4, 4, 4, 4, 4, 0, 0, 0, 0],
           [0, 0, 0, 0, 4, 4, 4, 4, 4, 4, 4, 4, 0, 0, 0, 0],
           [0, 0, 0, 0, 4, 4, 4, 0, 0, 4, 4, 4, 0, 0, 0, 0],
         ],
         house: [
-          [0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0], // Roof
+          [0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0],
           [0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0],
           [0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0],
-          [2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 0, 0], // Wall
-          [2, 1, 1, 3, 3, 3, 3, 3, 3, 3, 3, 1, 1, 2, 0, 0], // Balcony Rail
-          [2, 1, 1, 4, 4, 4, 4, 4, 4, 4, 4, 1, 1, 2, 0, 0], // Window Glass (4)
+          [2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 0, 0],
+          [2, 1, 1, 3, 3, 3, 3, 3, 3, 3, 3, 1, 1, 2, 0, 0],
+          [2, 1, 1, 4, 4, 4, 4, 4, 4, 4, 4, 1, 1, 2, 0, 0],
           [2, 1, 1, 4, 4, 4, 4, 4, 4, 4, 4, 1, 1, 2, 0, 0],
           [2, 1, 1, 4, 4, 4, 4, 4, 4, 4, 4, 1, 1, 2, 0, 0],
           [2, 1, 1, 4, 4, 4, 4, 4, 4, 4, 4, 1, 1, 2, 0, 0],
           [2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 0, 0],
           [2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 0, 0],
-          [2, 1, 1, 4, 4, 4, 1, 1, 4, 4, 4, 1, 1, 2, 0, 0], // Doors/Windows
+          [2, 1, 1, 4, 4, 4, 1, 1, 4, 4, 4, 1, 1, 2, 0, 0],
           [2, 1, 1, 4, 4, 4, 1, 1, 4, 4, 4, 1, 1, 2, 0, 0],
           [2, 1, 1, 4, 4, 4, 1, 1, 4, 4, 4, 1, 1, 2, 0, 0],
           [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0],
@@ -495,7 +509,7 @@
           [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0],
           [0, 1, 1, 2, 2, 2, 2, 2, 2, 1, 1, 0, 0, 0, 0, 0],
           [0, 1, 2, 1, 1, 1, 1, 1, 1, 2, 1, 0, 0, 0, 0, 0],
-          [0, 1, 2, 1, 1, 2, 2, 1, 1, 2, 1, 0, 0, 0, 0, 0], // "?" mark shape
+          [0, 1, 2, 1, 1, 2, 2, 1, 1, 2, 1, 0, 0, 0, 0, 0],
           [0, 1, 2, 1, 1, 1, 2, 1, 1, 2, 1, 0, 0, 0, 0, 0],
           [0, 1, 2, 1, 1, 2, 1, 1, 1, 2, 1, 0, 0, 0, 0, 0],
           [0, 1, 2, 1, 1, 2, 1, 1, 1, 2, 1, 0, 0, 0, 0, 0],
@@ -508,23 +522,22 @@
           [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
           [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
         ],
-        // Portrait Components reused from previous logic, but ensure they are safe
         portraits: {
           base: [
             [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
             [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0],
             [0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0],
             [0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0],
-            [0, 0, 1, 1, 1, 2, 2, 1, 1, 2, 2, 1, 1, 0, 0, 0], // Eyes
+            [0, 0, 1, 1, 1, 2, 2, 1, 1, 2, 2, 1, 1, 0, 0, 0],
             [0, 0, 1, 1, 1, 2, 2, 1, 1, 2, 2, 1, 1, 0, 0, 0],
             [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
-            [0, 0, 1, 1, 1, 1, 1, 3, 3, 1, 1, 1, 1, 0, 0, 0], // Nose
+            [0, 0, 1, 1, 1, 1, 1, 3, 3, 1, 1, 1, 1, 0, 0, 0],
             [0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
-            [0, 0, 0, 1, 1, 1, 1, 4, 4, 1, 1, 1, 0, 0, 0, 0], // Mouth
+            [0, 0, 0, 1, 1, 1, 1, 4, 4, 1, 1, 1, 0, 0, 0, 0],
             [0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0],
             [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0],
             [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 5, 5, 5, 5, 5, 5, 5, 0, 0, 0, 0, 0], // Clothes
+            [0, 0, 0, 0, 5, 5, 5, 5, 5, 5, 5, 0, 0, 0, 0, 0],
             [0, 0, 0, 5, 5, 5, 5, 5, 5, 5, 5, 5, 0, 0, 0, 0],
             [0, 0, 0, 5, 5, 5, 5, 5, 5, 5, 5, 5, 0, 0, 0, 0],
           ],
@@ -628,7 +641,6 @@
       function generateClues() {
         mapObjects = [];
 
-        // 1. Generate 2 Proof Cards
         let missingTraits = ATTRIBUTES.filter(
           (t) => !solution.suspect.traits.includes(t)
         );
@@ -639,7 +651,6 @@
           placeObject("proof", trait);
         });
 
-        // 2. Generate Location Clues
         let wrongLocations = LOCATIONS.filter(
           (l) => l.name !== solution.location.name
         );
@@ -709,6 +720,9 @@
 
       // --- Update ---
       function update() {
+        // Milou Bark Timer
+        if (milouBarkState.timer > 0) milouBarkState.timer--;
+
         if (currentState === STATE.START) {
           if (isKeyJustPressed("Enter") || isKeyJustPressed("z")) {
             AudioSynth.sfx.collect();
@@ -733,6 +747,17 @@
 
         if (currentState === STATE.NOTEBOOK) {
           if (isKeyJustPressed("x")) currentState = STATE.PLAYING;
+
+          if (isKeyJustPressed("ArrowLeft")) {
+            AudioSynth.sfx.page();
+            notebookPage--;
+            if (notebookPage < 0) notebookPage = SUSPECTS.length; // Wrap to locations
+          }
+          if (isKeyJustPressed("ArrowRight")) {
+            AudioSynth.sfx.page();
+            notebookPage++;
+            if (notebookPage > SUSPECTS.length) notebookPage = 0; // Wrap to start
+          }
           return;
         }
 
@@ -782,13 +807,12 @@
         // Player Movement
         let dx = 0;
         let dy = 0;
-        const speed = 1.5;
         player.moving = false;
 
-        if (isKeyPressed("ArrowLeft")) dx = -speed;
-        if (isKeyPressed("ArrowRight")) dx = speed;
-        if (isKeyPressed("ArrowUp")) dy = -speed;
-        if (isKeyPressed("ArrowDown")) dy = speed;
+        if (isKeyPressed("ArrowLeft")) dx = -1.5;
+        if (isKeyPressed("ArrowRight")) dx = 1.5;
+        if (isKeyPressed("ArrowUp")) dy = -1.5;
+        if (isKeyPressed("ArrowDown")) dy = 1.5;
 
         if (dx !== 0 || dy !== 0) {
           player.moving = true;
@@ -807,7 +831,7 @@
             player.y = nextY;
         }
 
-        // Milou
+        // Milou Logic
         if (dx !== 0 || dy !== 0) {
           if (frameCount % 10 === 0) {
             player.history.push({
@@ -822,6 +846,7 @@
         if (isKeyJustPressed("x")) {
           AudioSynth.sfx.step();
           currentState = STATE.NOTEBOOK;
+          notebookPage = 0; // Reset to first page on open
         }
 
         if (isKeyJustPressed("z")) {
@@ -830,20 +855,26 @@
       }
 
       function checkInteraction() {
+        let interacted = false;
+
+        // Check Haddock
         if (Math.hypot(player.x - haddock.x, player.y - haddock.y) < 20) {
           AudioSynth.sfx.haddock();
           let quote =
             HADDOCK_QUOTES[Math.floor(Math.random() * HADDOCK_QUOTES.length)];
           showMessage = ["KAPTEN HADDOCK:", "", quote];
           currentMessagePortrait = "haddock";
-          return;
+          interacted = true;
+          return; // Return immediately to show msg
         }
 
+        // Check Objects
         for (let obj of mapObjects) {
           if (obj.collected && obj.type !== "police") continue;
 
           let dist = Math.hypot(player.x - obj.x, player.y - obj.y);
           if (dist < 16) {
+            interacted = true;
             if (obj.type === "proof") {
               AudioSynth.sfx.collect();
               obj.collected = true;
@@ -874,6 +905,31 @@
             }
             return;
           }
+        }
+
+        // If no interaction happened, Trigger Milou
+        if (!interacted) {
+          triggerMilouBark();
+        }
+      }
+
+      function triggerMilouBark() {
+        AudioSynth.sfx.bark();
+        milouBarkState.active = true;
+        milouBarkState.timer = 60; // Show for 1 sec
+        milouBarkState.found = false;
+
+        // Check nearest uncollected clue
+        let nearestDist = 9999;
+        for (let obj of mapObjects) {
+          if (obj.collected || obj.type === "police") continue;
+          let dist = Math.hypot(player.x - obj.x, player.y - obj.y);
+          if (dist < nearestDist) nearestDist = dist;
+        }
+
+        // 6 tiles approx 96px
+        if (nearestDist < 100) {
+          milouBarkState.found = true;
         }
       }
 
@@ -952,7 +1008,6 @@
         if (currentState === STATE.PLAYING || showMessage) {
           drawMap();
 
-          // Haddock (Using 16x16 Tintin colors + Haddock Palette)
           drawSprite(
             SPRITES.haddock,
             haddock.x,
@@ -963,7 +1018,6 @@
             PALETTE.black
           );
 
-          // Objects
           mapObjects.forEach((obj) => {
             if (!obj.collected || obj.type === "police") {
               if (obj.type === "proof")
@@ -991,10 +1045,9 @@
             }
           });
 
-          // Animation
           let animFrame = player.moving ? Math.floor(frameCount / 10) % 2 : 0;
 
-          // Milou
+          // Milou Draw
           let milouPos = player.history.length > 0 ? player.history[0] : player;
           let milouFrame = milouPos.moving || player.moving ? animFrame : 0;
           drawSprite(
@@ -1005,7 +1058,14 @@
             PALETTE.black
           );
 
-          // Tintin
+          // Milou Bark Feedback
+          if (milouBarkState.timer > 0) {
+            ctx.fillStyle = "#FFF";
+            ctx.font = '8px "Press Start 2P"';
+            let txt = milouBarkState.found ? "VOV! VOV!" : "VOV?";
+            ctx.fillText(txt, milouPos.x - 10, milouPos.y - 10);
+          }
+
           drawSprite(
             SPRITES.tintin[animFrame],
             player.x,
@@ -1039,7 +1099,7 @@
             drawBox(boxX, 80, boxW, 80);
           }
 
-          ctx.fillStyle = PALETTE.text; // Black text
+          ctx.fillStyle = PALETTE.text;
           for (let i = 0; i < showMessage.length; i++) {
             ctx.fillText(showMessage[i], textX, 100 + i * 10);
           }
@@ -1074,16 +1134,13 @@
       }
 
       function drawMap() {
-        // Fill background (Road color)
         ctx.fillStyle = PALETTE.road;
         ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
-        // Draw Locations
         LOCATIONS.forEach((loc) => {
           let lx = loc.x * TILE_SIZE;
           let ly = loc.y * TILE_SIZE;
 
-          // Building
           for (let r = 0; r < 3; r++) {
             for (let c = 0; c < 4; c++) {
               drawSprite(
@@ -1100,7 +1157,6 @@
 
           ctx.fillStyle = "#FFF";
           ctx.font = '8px "Press Start 2P"';
-          // Add shadow for better readability
           ctx.fillStyle = "#000";
           ctx.fillText(loc.name.substr(0, 10), lx - 7, ly - 3);
           ctx.fillStyle = "#FFF";
@@ -1118,50 +1174,85 @@
         ctx.font = '8px "Press Start 2P"';
         ctx.fillText("-- ANTECKNINGSBOK --", 40, 30);
 
-        let y = 50;
-        ctx.fillText("MISSTÄNKTA:", 20, y);
-        y += 15;
+        // Page Indicators (Arrows)
+        if (Math.floor(frameCount / 30) % 2 === 0) {
+          if (notebookPage > 0) ctx.fillText("<", 20, 200);
+          if (notebookPage < SUSPECTS.length) ctx.fillText(">", 220, 200);
+        }
+        ctx.fillText(notebookPage + 1 + "/" + (SUSPECTS.length + 1), 110, 200);
 
-        let eliminatedTraits = cluesFound
-          .filter((c) => c.type === "trait")
-          .map((c) => c.value);
+        if (notebookPage < SUSPECTS.length) {
+          // --- Suspect Profile Page ---
+          let s = SUSPECTS[notebookPage];
+          let eliminatedTraits = cluesFound
+            .filter((c) => c.type === "trait")
+            .map((c) => c.value);
 
-        SUSPECTS.forEach((s) => {
           let innocent = false;
+          let guiltyTrait = null;
           eliminatedTraits.forEach((trait) => {
-            if (s.traits.includes(trait)) innocent = true;
+            if (s.traits.includes(trait)) {
+              innocent = true;
+              guiltyTrait = trait;
+            }
           });
 
-          let prefix = innocent ? "X " : "  ";
-          let color = innocent ? "#555" : "#FFF";
-          ctx.fillStyle = color;
-          ctx.fillText(prefix + s.name, 20, y);
+          // Name
+          ctx.fillStyle = PALETTE.white;
+          ctx.fillText("NAMN: " + s.name, 30, 60);
 
-          if (!innocent) {
-            drawPortrait("suspect", s.traits, 150, y - 8, 1);
+          // Portrait
+          drawPortrait("suspect", s.traits, 30, 80, 4); // Scale 4x
+
+          // Status
+          ctx.fillText("STATUS:", 120, 90);
+          if (innocent) {
+            ctx.fillStyle = PALETTE.innocent;
+            ctx.fillText("AVSKRIVEN", 120, 105);
+            ctx.font = '6px "Press Start 2P"';
+            ctx.fillText("(Har " + guiltyTrait + ")", 120, 120);
+          } else {
+            ctx.fillStyle = "#00FF00"; // Green
+            ctx.fillText("MISSTÄNKT", 120, 105);
           }
 
-          y += 16;
-        });
+          // Traits List
+          ctx.font = '8px "Press Start 2P"';
+          ctx.fillStyle = PALETTE.white;
+          ctx.fillText("KÄNNETECKEN:", 120, 140);
 
-        y = 150;
-        ctx.fillStyle = "#FFF";
-        ctx.fillText("PLATSER:", 20, y);
-        y += 15;
+          let yT = 155;
+          ctx.font = '6px "Press Start 2P"';
+          s.traits.forEach((t) => {
+            let isEliminated = eliminatedTraits.includes(t);
+            ctx.fillStyle = isEliminated ? PALETTE.innocent : "#AAAAAA";
+            ctx.fillText("- " + t, 120, yT);
+            yT += 10;
+          });
+        } else {
+          // --- Locations Summary Page ---
+          ctx.fillStyle = PALETTE.white;
+          ctx.fillText("PLATSER:", 30, 60);
 
-        let eliminatedLocs = cluesFound
-          .filter((c) => c.type === "location")
-          .map((c) => c.value);
+          let eliminatedLocs = cluesFound
+            .filter((c) => c.type === "location")
+            .map((c) => c.value);
+          let y = 80;
 
-        LOCATIONS.forEach((l) => {
-          let innocent = eliminatedLocs.includes(l.name);
-          let prefix = innocent ? "X " : "  ";
-          let color = innocent ? "#555" : "#FFF";
-          ctx.fillStyle = color;
-          ctx.fillText(prefix + l.name, 20, y);
-          y += 10;
-        });
+          LOCATIONS.forEach((l) => {
+            let innocent = eliminatedLocs.includes(l.name);
+            if (innocent) {
+              ctx.fillStyle = "#555";
+              ctx.fillText("X " + l.name, 40, y);
+            } else {
+              ctx.fillStyle = "#FFF";
+              ctx.fillText("? " + l.name, 40, y);
+            }
+            y += 15;
+          });
+        }
 
+        ctx.font = '8px "Press Start 2P"';
         ctx.fillStyle = PALETTE.clueOrange;
         ctx.fillText("TRYCK X FÖR STÄNG", 70, 220);
       }
@@ -1229,11 +1320,9 @@
       }
 
       function drawBox(x, y, w, h) {
-        // Drop shadow
         ctx.fillStyle = "#000";
         ctx.fillRect(x + 4, y + 4, w, h);
-        // Main box
-        ctx.fillStyle = PALETTE.comicBg; // White
+        ctx.fillStyle = PALETTE.comicBg;
         ctx.fillRect(x, y, w, h);
         ctx.strokeStyle = "#000";
         ctx.lineWidth = 2;
