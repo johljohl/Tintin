@@ -203,7 +203,7 @@
     <script>
       /**
        * TINTINS ÄVENTYR: MYSTERIET MED PROFESSOR KALKYLS KIDNAPPNING
-       * Version 5.2 - Paged Notebook
+       * Version 5.5 - Fixed Haddock Eyes (2 Eyes instead of 3)
        */
 
       // --- Constants & Config ---
@@ -225,17 +225,18 @@
         milouWhite: "#F0F0F0",
         haddockBlue: "#1A237E",
         haddockHat: "#212121",
-        grass: "#4CAF50",
-        grassDark: "#388E3C",
-        road: "#757575",
+        grass: "#2E7D32", // Darker green park
+        grassLight: "#4CAF50",
+        road: "#9E9E9E", // Lighter asphalt
         roadDark: "#616161",
+        square: "#D7CCC8", // Beige for square
         buildingWall: "#F5F5DC",
         buildingRoof: "#546E7A",
         window: "#81D4FA",
         clueOrange: "#FF9800",
         clueBlue: "#29B6F6",
         uiBorder: "#000000",
-        innocent: "#AA0000", // Red for crossed out/innocent
+        innocent: "#AA0000",
         suspect: "#000000",
       };
 
@@ -337,12 +338,12 @@
       // --- Logic Data ---
       const ATTRIBUTES = ["Hatt", "Solglasögon", "Mustasch", "Kofot", "Skor"];
       const LOCATIONS = [
-        { name: "Marlinsprång", x: 2, y: 2 },
-        { name: "Laboratoriet", x: 10, y: 2 },
-        { name: "Hamnen", x: 2, y: 8 },
-        { name: "Operan", x: 10, y: 8 },
-        { name: "Museet", x: 2, y: 13 },
-        { name: "Flygplatsen", x: 10, y: 13 },
+        { name: "Marlinsprång", x: 1, y: 1 },
+        { name: "Laboratoriet", x: 11, y: 1 },
+        { name: "Hamnen", x: 1, y: 11 },
+        { name: "Operan", x: 11, y: 11 },
+        { name: "Museet", x: 1, y: 6 },
+        { name: "Flygplatsen", x: 11, y: 6 },
       ];
 
       const SUSPECTS = [
@@ -362,7 +363,7 @@
       let cluesFound = [];
       let player = {
         x: 7 * TILE_SIZE,
-        y: 7 * TILE_SIZE,
+        y: 9 * TILE_SIZE, // Start near center
         dir: 0,
         moving: false,
         history: [],
@@ -372,9 +373,9 @@
       let currentMessagePortrait = null;
       let accuseStep = 0;
       let accuseSelection = { suspect: 0, location: 0 };
-      let haddock = { x: 4 * TILE_SIZE, y: 4 * TILE_SIZE };
+      let haddock = { x: 6 * TILE_SIZE, y: 8 * TILE_SIZE };
       let milouBarkState = { active: false, timer: 0, found: false };
-      let notebookPage = 0; // 0 to SUSPECTS.length (last page is locations)
+      let notebookPage = 0;
 
       const HADDOCK_QUOTES = [
         "Anfäkta och anamma!",
@@ -474,7 +475,7 @@
           [0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0],
           [0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0],
           [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
-          [0, 0, 0, 0, 1, 2, 1, 2, 1, 1, 2, 1, 1, 0, 0, 0],
+          [0, 0, 0, 0, 1, 1, 2, 1, 1, 2, 1, 1, 1, 0, 0, 0], // Fixed Eyes (2)
           [0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0],
           [0, 0, 0, 0, 1, 4, 4, 4, 4, 4, 4, 4, 1, 0, 0, 0],
           [0, 0, 0, 0, 4, 4, 4, 4, 4, 4, 4, 4, 4, 0, 0, 0],
@@ -1134,9 +1135,39 @@
       }
 
       function drawMap() {
-        ctx.fillStyle = PALETTE.road;
+        // Fill background with darker grass (park)
+        ctx.fillStyle = PALETTE.grass;
         ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
 
+        // Draw Roads - A simple grid + Square
+        ctx.fillStyle = PALETTE.road;
+
+        // Vertical Roads (Left, Middle-Left, Middle-Right, Right)
+        ctx.fillRect(0, 0, 48, CANVAS_H); // Left Blvd
+        ctx.fillRect(104, 0, 48, CANVAS_H); // Center Avenue
+        ctx.fillRect(208, 0, 48, CANVAS_H); // Right Blvd
+
+        // Horizontal Roads (Top, Middle, Bottom)
+        ctx.fillRect(0, 0, CANVAS_W, 48); // Top
+        ctx.fillRect(0, 96, CANVAS_W, 48); // Middle
+        ctx.fillRect(0, 192, CANVAS_W, 48); // Bottom
+
+        // Draw Central Square (Place de la Concorde style)
+        ctx.fillStyle = PALETTE.square;
+        ctx.fillRect(96, 88, 64, 64);
+
+        // Draw lighter grass patches in blocks
+        ctx.fillStyle = PALETTE.grassLight;
+        // Block 1 (Top Left)
+        ctx.fillRect(52, 52, 48, 40);
+        // Block 2 (Top Right)
+        ctx.fillRect(156, 52, 48, 40);
+        // Block 3 (Bottom Left)
+        ctx.fillRect(52, 148, 48, 40);
+        // Block 4 (Bottom Right)
+        ctx.fillRect(156, 148, 48, 40);
+
+        // Draw Locations
         LOCATIONS.forEach((loc) => {
           let lx = loc.x * TILE_SIZE;
           let ly = loc.y * TILE_SIZE;
